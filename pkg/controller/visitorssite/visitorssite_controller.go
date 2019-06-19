@@ -24,6 +24,11 @@ import (
 
 var log = logf.Log.WithName("controller_visitorssite")
 
+const backendPort = 8000
+const frontendPort = 3000
+const backendServicePort = 30685
+const frontendServicePort = 30686
+
 /**
 * USER ACTION REQUIRED: This is a scaffold file intended for the user to modify with their own Controller
 * business logic.  Delete these comments after modifying this file.*
@@ -105,12 +110,27 @@ func (r *ReconcileVisitorsSite) Reconcile(request reconcile.Request) (reconcile.
 	// == Visitors Service ==
 	var result *reconcile.Result
 
-	result, err = r.ensureBackendDeployment(request, instance)
+	result, err = r.ensureDeployment(request,
+									 instance,
+									 instance.Name + "-backend",
+									 r.backendDeployment(instance))
 	if result != nil {
 		return *result, err
 	}
 
-	result, err = r.ensureBackendService(request, instance)
+	// result, err = r.ensureBackendService(request, instance)
+	result, err = r.ensureService(request,
+								  instance,
+								  instance.Name + "-backend-service",
+								  r.backendService(instance))
+	if result != nil {
+		return *result, err
+	}
+
+	result, err = r.ensureDeployment(request,
+									 instance,
+									 instance.Name + "-frontend",
+									 r.frontendDeployment(instance))
 	if result != nil {
 		return *result, err
 	}
@@ -119,40 +139,9 @@ func (r *ReconcileVisitorsSite) Reconcile(request reconcile.Request) (reconcile.
 	return reconcile.Result{}, nil
 }
 
-func (r *ReconcileVisitorsSite) ensureBackendDeployment(request reconcile.Request, instance *visitorsv1alpha1.VisitorsSite) (*reconcile.Result, error) {
-
-	// See if deployment already exists and create if it doesn't
-	found := &appsv1.Deployment{}
-	err := r.client.Get(context.TODO(), types.NamespacedName{Name: instance.Name + "-backend", Namespace: instance.Namespace}, found)
-	if err != nil && errors.IsNotFound(err) {
-
-		// Create the deployment config
-		dep := r.backendDeployment(instance)
-		log.Info("Creating a new Deployment", "Deployment.Namespace", dep.Namespace, "Deployment.Name", dep.Name)
-
-		// Create the deployment
-		err = r.client.Create(context.TODO(), dep)
-
-		if err != nil {
-			// Deployment failed
-			log.Error(err, "Failed to create new Deployment", "Deployment.Namespace", dep.Namespace, "Deployment.Name", dep.Name)
-			return &reconcile.Result{}, err
-		} else {
-			// Deployment was successful
-			return &reconcile.Result{Requeue: true}, nil
-		}
-	} else if err != nil {
-		// Error that isn't due to the deployment not existing
-		log.Error(err, "Failed to get Deployment")
-		return &reconcile.Result{}, err
-	}
-
-	return nil, nil
-}
-
 func (r *ReconcileVisitorsSite) ensureBackendService(request reconcile.Request, instance *visitorsv1alpha1.VisitorsSite) (*reconcile.Result, error) {
 	found := &corev1.Service{}
-	err := r.client.Get(context.TODO(), types.NamespacedName{Name: instance.Name + "-backend", Namespace: instance.Namespace}, found)
+	err := r.client.Get(context.TODO(), types.NamespacedName{Name: instance.Name + "-backend-service", Namespace: instance.Namespace}, found)
 	if err != nil && errors.IsNotFound(err) {
 
 		// Create the service spec
@@ -179,8 +168,76 @@ func (r *ReconcileVisitorsSite) ensureBackendService(request reconcile.Request, 
 	return nil, nil
 }
 
+func (r *ReconcileVisitorsSite) ensureDeployment(request reconcile.Request,
+												 instance *visitorsv1alpha1.VisitorsSite,
+												 name string,
+												 dep *appsv1.Deployment,
+												) (*reconcile.Result, error) {
+
+	// See if deployment already exists and create if it doesn't
+	found := &appsv1.Deployment{}
+	err := r.client.Get(context.TODO(), types.NamespacedName{
+		Name: name,
+		Namespace: instance.Namespace,
+		}, found)
+	if err != nil && errors.IsNotFound(err) {
+
+		// Create the deployment
+		log.Info("Creating a new Deployment", "Deployment.Namespace", dep.Namespace, "Deployment.Name", dep.Name)
+		err = r.client.Create(context.TODO(), dep)
+
+		if err != nil {
+			// Deployment failed
+			log.Error(err, "Failed to create new Deployment", "Deployment.Namespace", dep.Namespace, "Deployment.Name", dep.Name)
+			return &reconcile.Result{}, err
+		} else {
+			// Deployment was successful
+			return &reconcile.Result{Requeue: true}, nil
+		}
+	} else if err != nil {
+		// Error that isn't due to the deployment not existing
+		log.Error(err, "Failed to get Deployment")
+		return &reconcile.Result{}, err
+	}
+
+	return nil, nil
+}
+
+func (r *ReconcileVisitorsSite) ensureService(request reconcile.Request,
+											  instance *visitorsv1alpha1.VisitorsSite,
+											  name string,
+											  s *corev1.Service,
+											 ) (*reconcile.Result, error) {
+	found := &corev1.Service{}
+	err := r.client.Get(context.TODO(), types.NamespacedName{
+		Name: name,
+		Namespace: instance.Namespace,
+		}, found)
+	if err != nil && errors.IsNotFound(err) {
+
+		// Create the service
+		log.Info("Creating a new Service", "Service.Namespace", s.Namespace, "Service.Name", s.Name)
+		err = r.client.Create(context.TODO(), s)
+
+		if err != nil {
+			// Creation failed
+			log.Error(err, "Failed to create new Service", "Service.Namespace", s.Namespace, "Service.Name", s.Name)
+			return &reconcile.Result{}, err
+		} else {
+			// Creation was successful
+			return &reconcile.Result{Requeue: true}, nil
+		}
+	} else if err != nil {
+		// Error that isn't due to the service not existing
+		log.Error(err, "Failed to get Service")
+		return &reconcile.Result{}, err
+	}
+
+	return nil, nil
+}
+
 func (r *ReconcileVisitorsSite) backendDeployment(v *visitorsv1alpha1.VisitorsSite) *appsv1.Deployment {
-	labels := map[string]string{"app": "visitors", "visitorssite_cr": v.Name + "-backend"}
+	labels := backendLabels(v)
 	size := v.Spec.Size
 
 	dep := &appsv1.Deployment{
@@ -202,7 +259,7 @@ func (r *ReconcileVisitorsSite) backendDeployment(v *visitorsv1alpha1.VisitorsSi
 						Image:	"jdob/visitors-service:latest",
 						Name:	"visitors-service",
 						Ports:	[]corev1.ContainerPort{{
-							ContainerPort: 	8000,
+							ContainerPort: 	backendPort,
 							Name:			"visitors",
 						}},
 					}},
@@ -216,19 +273,19 @@ func (r *ReconcileVisitorsSite) backendDeployment(v *visitorsv1alpha1.VisitorsSi
 }
 
 func (r *ReconcileVisitorsSite) backendService(v *visitorsv1alpha1.VisitorsSite) *corev1.Service {
-	labels := map[string]string{"app": "visitors", "visitorssite_cr": v.Name + "-backend"}
+	labels := backendLabels(v)
 
 	s := &corev1.Service{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:		v.Name + "-backend",
+			Name:		v.Name + "-backend-service",
 			Namespace: 	v.Namespace,
 		},
 		Spec: corev1.ServiceSpec{
 			Selector: labels,
 			Ports: []corev1.ServicePort{{
 				Protocol: corev1.ProtocolTCP,
-				Port: 8000,
-				TargetPort: intstr.FromInt(8000),
+				Port: backendPort,
+				TargetPort: intstr.FromInt(backendPort),
 				NodePort: 30685,
 			}},
 			Type: corev1.ServiceTypeNodePort,
@@ -241,13 +298,13 @@ func (r *ReconcileVisitorsSite) backendService(v *visitorsv1alpha1.VisitorsSite)
 	return s
 }
 
-func (r *ReconcileVisitorsSite) webuiDeployment(v *visitorsv1alpha1.VisitorsSite) *appsv1.Deployment {
-	labels := map[string]string{"app": "visitors", "visitorssite_cr": v.Name}
+func (r *ReconcileVisitorsSite) frontendDeployment(v *visitorsv1alpha1.VisitorsSite) *appsv1.Deployment {
+	labels := frontendLabels(v)
 	size := int32(1)
 
 	dep := &appsv1.Deployment{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:		v.Name,
+			Name:		v.Name + "-frontend",
 			Namespace: 	v.Namespace,
 		},
 		Spec: appsv1.DeploymentSpec{
@@ -264,7 +321,7 @@ func (r *ReconcileVisitorsSite) webuiDeployment(v *visitorsv1alpha1.VisitorsSite
 						Image:	"jdob/visitors-webui:latest",
 						Name:	"visitors-webui",
 						Ports:	[]corev1.ContainerPort{{
-							ContainerPort: 	3000,
+							ContainerPort: 	frontendPort,
 							Name:			"visitors",
 						}},
 					}},
@@ -275,4 +332,44 @@ func (r *ReconcileVisitorsSite) webuiDeployment(v *visitorsv1alpha1.VisitorsSite
 
 	controllerutil.SetControllerReference(v, dep, r.scheme)
 	return dep
+}
+
+func (r *ReconcileVisitorsSite) frontendService(v *visitorsv1alpha1.VisitorsSite) *corev1.Service {
+	labels := frontendLabels(v)
+
+	s := &corev1.Service{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:		v.Name + "-frontend-service",
+			Namespace: 	v.Namespace,
+		},
+		Spec: corev1.ServiceSpec{
+			Selector: labels,
+			Ports: []corev1.ServicePort{{
+				Protocol: corev1.ProtocolTCP,
+				Port: frontendPort,
+				TargetPort: intstr.FromInt(frontendPort),
+				NodePort: frontendServicePort,
+			}},
+			Type: corev1.ServiceTypeNodePort,
+		},
+	}
+
+	log.Info("Service Spec", "Service.Name", s.ObjectMeta.Name)
+
+	controllerutil.SetControllerReference(v, s, r.scheme)
+	return s
+}
+
+func backendLabels(v *visitorsv1alpha1.VisitorsSite) map[string]string {
+	return map[string]string{
+		"app": "visitors",
+		"visitorssite_cr": v.Name + "-backend",
+	}
+}
+
+func frontendLabels(v *visitorsv1alpha1.VisitorsSite) map[string]string {
+	return map[string]string{
+		"app": "visitors",
+		"visitorssite_cr": v.Name + "-frontend",
+	}
 }
