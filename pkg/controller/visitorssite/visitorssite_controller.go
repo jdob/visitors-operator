@@ -101,38 +101,49 @@ func (r *ReconcileVisitorsSite) Reconcile(request reconcile.Request) (reconcile.
 		return reconcile.Result{}, err
 	}
 
+	// == Visitors Service ==
+	var result *reconcile.Result
+	result, err = r.checkServiceDeployment(request, instance)
+
+	if result != nil {
+		return *result, err
+	}
+
+	return reconcile.Result{}, nil
+}
+
+func (r *ReconcileVisitorsSite) checkServiceDeployment(request reconcile.Request, instance *visitorsv1alpha1.VisitorsSite) (*reconcile.Result, error) {
+
 	// See if deployment already exists and create if it doesn't
 	found := &appsv1.Deployment{}
-	err = r.client.Get(context.TODO(), types.NamespacedName{Name: instance.Name, Namespace: instance.Namespace}, found)
+	err := r.client.Get(context.TODO(), types.NamespacedName{Name: instance.Name, Namespace: instance.Namespace}, found)
 	if err != nil && errors.IsNotFound(err) {
 
 		// Create the deployment config
-		dep := r.deployment(instance)
-		reqLogger.Info("Creating a new Deployment", "Deployment.Namespace", dep.Namespace, "Deployment.Name", dep.Name)
+		dep := r.serviceDeployment(instance)
+		log.Info("Creating a new Deployment", "Deployment.Namespace", dep.Namespace, "Deployment.Name", dep.Name)
 
 		// Create the deployment
 		err = r.client.Create(context.TODO(), dep)
 
 		if err != nil {
 			// Deployment failed
-			reqLogger.Error(err, "Failed to create new Deployment", "Deployment.Namespace", dep.Namespace, "Deployment.Name", dep.Name)
-			return reconcile.Result{}, err
+			log.Error(err, "Failed to create new Deployment", "Deployment.Namespace", dep.Namespace, "Deployment.Name", dep.Name)
+			return &reconcile.Result{}, err
 		} else {
 			// Deployment was successful
-			return reconcile.Result{Requeue: true}, nil
+			return &reconcile.Result{Requeue: true}, nil
 		}
 	} else if err != nil {
 		// Error that isn't due to the deployment not existing
-		reqLogger.Error(err, "Failed to get Deployment")
-		return reconcile.Result{}, err
+		log.Error(err, "Failed to get Deployment")
+		return &reconcile.Result{}, err
 	}
 
-
-
-	return reconcile.Result{}, nil
+	return nil, nil
 }
 
-func (r *ReconcileVisitorsSite) deployment(v *visitorsv1alpha1.VisitorsSite) *appsv1.Deployment {
+func (r *ReconcileVisitorsSite) serviceDeployment(v *visitorsv1alpha1.VisitorsSite) *appsv1.Deployment {
 	labels := map[string]string{"app": "visitors", "visitorssite_cr": v.Name}
 	size := v.Spec.Size
 
