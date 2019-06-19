@@ -8,6 +8,7 @@ import (
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
+	"k8s.io/apimachinery/pkg/util/intstr"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
@@ -103,24 +104,30 @@ func (r *ReconcileVisitorsSite) Reconcile(request reconcile.Request) (reconcile.
 
 	// == Visitors Service ==
 	var result *reconcile.Result
-	result, err = r.checkServiceDeployment(request, instance)
 
+	result, err = r.ensureBackendDeployment(request, instance)
 	if result != nil {
 		return *result, err
 	}
 
+	result, err = r.ensureBackendService(request, instance)
+	if result != nil {
+		return *result, err
+	}
+
+	// Everything went fine, don't requeue
 	return reconcile.Result{}, nil
 }
 
-func (r *ReconcileVisitorsSite) checkServiceDeployment(request reconcile.Request, instance *visitorsv1alpha1.VisitorsSite) (*reconcile.Result, error) {
+func (r *ReconcileVisitorsSite) ensureBackendDeployment(request reconcile.Request, instance *visitorsv1alpha1.VisitorsSite) (*reconcile.Result, error) {
 
 	// See if deployment already exists and create if it doesn't
 	found := &appsv1.Deployment{}
-	err := r.client.Get(context.TODO(), types.NamespacedName{Name: instance.Name, Namespace: instance.Namespace}, found)
+	err := r.client.Get(context.TODO(), types.NamespacedName{Name: instance.Name + "-backend", Namespace: instance.Namespace}, found)
 	if err != nil && errors.IsNotFound(err) {
 
 		// Create the deployment config
-		dep := r.serviceDeployment(instance)
+		dep := r.backendDeployment(instance)
 		log.Info("Creating a new Deployment", "Deployment.Namespace", dep.Namespace, "Deployment.Name", dep.Name)
 
 		// Create the deployment
@@ -143,13 +150,42 @@ func (r *ReconcileVisitorsSite) checkServiceDeployment(request reconcile.Request
 	return nil, nil
 }
 
-func (r *ReconcileVisitorsSite) serviceDeployment(v *visitorsv1alpha1.VisitorsSite) *appsv1.Deployment {
-	labels := map[string]string{"app": "visitors", "visitorssite_cr": v.Name}
+func (r *ReconcileVisitorsSite) ensureBackendService(request reconcile.Request, instance *visitorsv1alpha1.VisitorsSite) (*reconcile.Result, error) {
+	found := &corev1.Service{}
+	err := r.client.Get(context.TODO(), types.NamespacedName{Name: instance.Name + "-backend", Namespace: instance.Namespace}, found)
+	if err != nil && errors.IsNotFound(err) {
+
+		// Create the service spec
+		dep := r.backendService(instance)
+		log.Info("Creating a new Service", "Service.Namespace", dep.Namespace, "Service.Name", dep.Name)
+
+		// Create the service
+		err = r.client.Create(context.TODO(), dep)
+
+		if err != nil {
+			// Creation failed
+			log.Error(err, "Failed to create new Service", "Service.Namespace", dep.Namespace, "Service.Name", dep.Name)
+			return &reconcile.Result{}, err
+		} else {
+			// Creation was successful
+			return &reconcile.Result{Requeue: true}, nil
+		}
+	} else if err != nil {
+		// Error that isn't due to the service not existing
+		log.Error(err, "Failed to get Service")
+		return &reconcile.Result{}, err
+	}
+
+	return nil, nil
+}
+
+func (r *ReconcileVisitorsSite) backendDeployment(v *visitorsv1alpha1.VisitorsSite) *appsv1.Deployment {
+	labels := map[string]string{"app": "visitors", "visitorssite_cr": v.Name + "-backend"}
 	size := v.Spec.Size
 
 	dep := &appsv1.Deployment{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:		v.Name,
+			Name:		v.Name + "-backend",
 			Namespace: 	v.Namespace,
 		},
 		Spec: appsv1.DeploymentSpec{
@@ -167,6 +203,68 @@ func (r *ReconcileVisitorsSite) serviceDeployment(v *visitorsv1alpha1.VisitorsSi
 						Name:	"visitors-service",
 						Ports:	[]corev1.ContainerPort{{
 							ContainerPort: 	8000,
+							Name:			"visitors",
+						}},
+					}},
+				},
+			},
+		},
+	}
+
+	controllerutil.SetControllerReference(v, dep, r.scheme)
+	return dep
+}
+
+func (r *ReconcileVisitorsSite) backendService(v *visitorsv1alpha1.VisitorsSite) *corev1.Service {
+	labels := map[string]string{"app": "visitors", "visitorssite_cr": v.Name + "-backend"}
+
+	s := &corev1.Service{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:		v.Name + "-backend",
+			Namespace: 	v.Namespace,
+		},
+		Spec: corev1.ServiceSpec{
+			Selector: labels,
+			Ports: []corev1.ServicePort{{
+				Protocol: corev1.ProtocolTCP,
+				Port: 8000,
+				TargetPort: intstr.FromInt(8000),
+				NodePort: 30685,
+			}},
+			Type: corev1.ServiceTypeNodePort,
+		},
+	}
+
+	log.Info("Service Spec", "Service.Name", s.ObjectMeta.Name)
+
+	controllerutil.SetControllerReference(v, s, r.scheme)
+	return s
+}
+
+func (r *ReconcileVisitorsSite) webuiDeployment(v *visitorsv1alpha1.VisitorsSite) *appsv1.Deployment {
+	labels := map[string]string{"app": "visitors", "visitorssite_cr": v.Name}
+	size := int32(1)
+
+	dep := &appsv1.Deployment{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:		v.Name,
+			Namespace: 	v.Namespace,
+		},
+		Spec: appsv1.DeploymentSpec{
+			Replicas: &size,
+			Selector: &metav1.LabelSelector{
+				MatchLabels: labels,
+			},
+			Template: corev1.PodTemplateSpec{
+				ObjectMeta: metav1.ObjectMeta{
+					Labels: labels,
+				},
+				Spec: corev1.PodSpec{
+					Containers: []corev1.Container{{
+						Image:	"jdob/visitors-webui:latest",
+						Name:	"visitors-webui",
+						Ports:	[]corev1.ContainerPort{{
+							ContainerPort: 	3000,
 							Name:			"visitors",
 						}},
 					}},
