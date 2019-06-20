@@ -34,6 +34,7 @@ func (r *ReconcileVisitorsSite) backendDeployment(v *visitorsv1alpha1.VisitorsSi
 				Spec: corev1.PodSpec{
 					Containers: []corev1.Container{{
 						Image:	"jdob/visitors-service:latest",
+						ImagePullPolicy: corev1.PullAlways,
 						Name:	"visitors-service",
 						Ports:	[]corev1.ContainerPort{{
 							ContainerPort: 	backendPort,
@@ -74,8 +75,6 @@ func (r *ReconcileVisitorsSite) backendService(v *visitorsv1alpha1.VisitorsSite)
 			Type: corev1.ServiceTypeNodePort,
 		},
 	}
-
-	log.Info("Service Spec", "Service.Name", s.ObjectMeta.Name)
 
 	controllerutil.SetControllerReference(v, s, r.scheme)
 	return s
