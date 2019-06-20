@@ -21,11 +21,6 @@ import (
 
 var log = logf.Log.WithName("controller_visitorssite")
 
-const backendPort = 8000
-const frontendPort = 3000
-const backendServicePort = 30685
-const frontendServicePort = 30686
-
 /**
 * USER ACTION REQUIRED: This is a scaffold file intended for the user to modify with their own Controller
 * business logic.  Delete these comments after modifying this file.*

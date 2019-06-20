@@ -10,6 +10,9 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 )
 
+const backendPort = 8000
+const backendServicePort = 30685
+
 func (r *ReconcileVisitorsSite) backendDeployment(v *visitorsv1alpha1.VisitorsSite) *appsv1.Deployment {
 	labels := backendLabels(v)
 	size := v.Spec.Size

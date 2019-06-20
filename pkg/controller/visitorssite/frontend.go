@@ -10,6 +10,9 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 )
 
+const frontendPort = 3000
+const frontendServicePort = 30686
+
 func (r *ReconcileVisitorsSite) frontendDeployment(v *visitorsv1alpha1.VisitorsSite) *appsv1.Deployment {
 	labels := frontendLabels(v)
 	size := int32(1)
