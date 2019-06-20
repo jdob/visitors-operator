@@ -86,8 +86,6 @@ func (r *ReconcileVisitorsSite) mysqlService(v *visitorsv1alpha1.VisitorsSite) *
 		},
 	}
 
-	log.Info("Service Spec", "Service.Name", s.ObjectMeta.Name)
-
 	controllerutil.SetControllerReference(v, s, r.scheme)
 	return s
 }
@@ -106,7 +104,8 @@ func (r *ReconcileVisitorsSite) waitForMysql(v *visitorsv1alpha1.VisitorsSite) (
 				return false, nil
 			}
 
-			if deployment.Status.AvailableReplicas == 1 {
+			if deployment.Status.ReadyReplicas == 1 {
+				log.Info("MySQL ready replica count met")
 				return true, nil
 			}
 
