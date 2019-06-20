@@ -173,7 +173,7 @@ func (r *ReconcileVisitorsSite) ensureDeployment(request reconcile.Request,
 			return &reconcile.Result{}, err
 		} else {
 			// Deployment was successful
-			return &reconcile.Result{Requeue: true}, nil
+			return nil, nil
 		}
 	} else if err != nil {
 		// Error that isn't due to the deployment not existing
@@ -206,7 +206,7 @@ func (r *ReconcileVisitorsSite) ensureService(request reconcile.Request,
 			return &reconcile.Result{}, err
 		} else {
 			// Creation was successful
-			return &reconcile.Result{Requeue: true}, nil
+			return nil, nil
 		}
 	} else if err != nil {
 		// Error that isn't due to the service not existing
