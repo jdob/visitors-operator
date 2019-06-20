@@ -1,6 +1,8 @@
 package visitorssite
 
 import (
+	"strconv"
+
 	visitorsv1alpha1 "github.com/jdob/visitors-operator/pkg/apis/visitors/v1alpha1"
 
 	appsv1 "k8s.io/api/apps/v1"
@@ -16,6 +18,7 @@ const frontendServicePort = 30686
 func (r *ReconcileVisitorsSite) frontendDeployment(v *visitorsv1alpha1.VisitorsSite) *appsv1.Deployment {
 	labels := labels(v, "frontend")
 	size := int32(1)
+	host := v.Spec.MinikubeIP
 
 	dep := &appsv1.Deployment{
 		ObjectMeta: metav1.ObjectMeta{
@@ -39,6 +42,16 @@ func (r *ReconcileVisitorsSite) frontendDeployment(v *visitorsv1alpha1.VisitorsS
 							ContainerPort: 	frontendPort,
 							Name:			"visitors",
 						}},
+						Env:	[]corev1.EnvVar{
+							{
+								Name:	"REACT_APP_SERVICE_HOST",
+								Value:	host,
+							},
+							{
+								Name:	"REACT_APP_SERVICE_PORT",
+								Value:	strconv.Itoa(backendServicePort),
+							},
+						},
 					}},
 				},
 			},

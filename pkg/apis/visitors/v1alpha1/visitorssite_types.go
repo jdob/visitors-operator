@@ -15,6 +15,7 @@ type VisitorsSiteSpec struct {
 	// Add custom validation using kubebuilder tags: https://book.kubebuilder.io/beyond_basics/generating_crd.html
 
 	Size int32 `json:"size"`
+	MinikubeIP string `json:"minikube"`
 }
 
 // VisitorsSiteStatus defines the observed state of VisitorsSite

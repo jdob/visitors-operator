@@ -5,4 +5,5 @@ metadata:
   namespace: default
 spec:
   # Add fields here
-  size: 1
+  size: 2
+  minikube: 192.168.99.101

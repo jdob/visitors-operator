@@ -145,6 +145,14 @@ func (r *ReconcileVisitorsSite) Reconcile(request reconcile.Request) (reconcile.
 		return *result, err
 	}
 
+	result, err = r.ensureService(request,
+								  instance,
+								  instance.Name + "-frontend-service",
+								  r.frontendService(instance))
+	if result != nil {
+		return *result, err
+	}
+
 	// Everything went fine, don't requeue
 	return reconcile.Result{}, nil
 }
