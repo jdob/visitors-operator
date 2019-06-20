@@ -14,7 +14,7 @@ const backendPort = 8000
 const backendServicePort = 30685
 
 func (r *ReconcileVisitorsSite) backendDeployment(v *visitorsv1alpha1.VisitorsSite) *appsv1.Deployment {
-	labels := backendLabels(v)
+	labels := labels(v, "backend")
 	size := v.Spec.Size
 
 	dep := &appsv1.Deployment{
@@ -39,6 +39,12 @@ func (r *ReconcileVisitorsSite) backendDeployment(v *visitorsv1alpha1.VisitorsSi
 							ContainerPort: 	backendPort,
 							Name:			"visitors",
 						}},
+						Env:	[]corev1.EnvVar{
+							{
+								Name:	"MYSQL_DATABASE",
+								Value:	"visitors",
+							},
+						},
 					}},
 				},
 			},
@@ -49,9 +55,8 @@ func (r *ReconcileVisitorsSite) backendDeployment(v *visitorsv1alpha1.VisitorsSi
 	return dep
 }
 
-
 func (r *ReconcileVisitorsSite) backendService(v *visitorsv1alpha1.VisitorsSite) *corev1.Service {
-	labels := backendLabels(v)
+	labels := labels(v, "backend")
 
 	s := &corev1.Service{
 		ObjectMeta: metav1.ObjectMeta{
@@ -74,11 +79,4 @@ func (r *ReconcileVisitorsSite) backendService(v *visitorsv1alpha1.VisitorsSite)
 
 	controllerutil.SetControllerReference(v, s, r.scheme)
 	return s
-}
-
-func backendLabels(v *visitorsv1alpha1.VisitorsSite) map[string]string {
-	return map[string]string{
-		"app": "visitors",
-		"visitorssite_cr": v.Name + "-backend",
-	}
 }

@@ -99,9 +99,27 @@ func (r *ReconcileVisitorsSite) Reconcile(request reconcile.Request) (reconcile.
 		return reconcile.Result{}, err
 	}
 
-	// == Visitors Service ==
 	var result *reconcile.Result
 
+	// == MySQL ==
+	result, err = r.ensureDeployment(request,
+									 instance,
+									 "mysql",
+									 r.mysqlDeployment(instance))
+	if result != nil {
+		return *result, err
+	}
+
+	result, err = r.ensureService(request,
+								  instance,
+								  "mysql",
+								  r.mysqlService(instance))
+	if result != nil {
+		return *result, err
+	}
+	r.waitForMysql(instance)
+
+	// == Visitors Service ==
 	result, err = r.ensureDeployment(request,
 									 instance,
 									 instance.Name + "-backend",
@@ -110,7 +128,6 @@ func (r *ReconcileVisitorsSite) Reconcile(request reconcile.Request) (reconcile.
 		return *result, err
 	}
 
-	// result, err = r.ensureBackendService(request, instance)
 	result, err = r.ensureService(request,
 								  instance,
 								  instance.Name + "-backend-service",
@@ -119,6 +136,7 @@ func (r *ReconcileVisitorsSite) Reconcile(request reconcile.Request) (reconcile.
 		return *result, err
 	}
 
+	// == Visitors Web UI ==
 	result, err = r.ensureDeployment(request,
 									 instance,
 									 instance.Name + "-frontend",
@@ -129,35 +147,6 @@ func (r *ReconcileVisitorsSite) Reconcile(request reconcile.Request) (reconcile.
 
 	// Everything went fine, don't requeue
 	return reconcile.Result{}, nil
-}
-
-func (r *ReconcileVisitorsSite) ensureBackendService(request reconcile.Request, instance *visitorsv1alpha1.VisitorsSite) (*reconcile.Result, error) {
-	found := &corev1.Service{}
-	err := r.client.Get(context.TODO(), types.NamespacedName{Name: instance.Name + "-backend-service", Namespace: instance.Namespace}, found)
-	if err != nil && errors.IsNotFound(err) {
-
-		// Create the service spec
-		dep := r.backendService(instance)
-		log.Info("Creating a new Service", "Service.Namespace", dep.Namespace, "Service.Name", dep.Name)
-
-		// Create the service
-		err = r.client.Create(context.TODO(), dep)
-
-		if err != nil {
-			// Creation failed
-			log.Error(err, "Failed to create new Service", "Service.Namespace", dep.Namespace, "Service.Name", dep.Name)
-			return &reconcile.Result{}, err
-		} else {
-			// Creation was successful
-			return &reconcile.Result{Requeue: true}, nil
-		}
-	} else if err != nil {
-		// Error that isn't due to the service not existing
-		log.Error(err, "Failed to get Service")
-		return &reconcile.Result{}, err
-	}
-
-	return nil, nil
 }
 
 func (r *ReconcileVisitorsSite) ensureDeployment(request reconcile.Request,
@@ -226,4 +215,12 @@ func (r *ReconcileVisitorsSite) ensureService(request reconcile.Request,
 	}
 
 	return nil, nil
+}
+
+func labels(v *visitorsv1alpha1.VisitorsSite, tier string) map[string]string {
+	return map[string]string{
+		"app": 	"visitors",
+		"visitorssite_cr": v.Name,
+		"tier":	tier,
+	}
 }

@@ -14,7 +14,7 @@ const frontendPort = 3000
 const frontendServicePort = 30686
 
 func (r *ReconcileVisitorsSite) frontendDeployment(v *visitorsv1alpha1.VisitorsSite) *appsv1.Deployment {
-	labels := frontendLabels(v)
+	labels := labels(v, "frontend")
 	size := int32(1)
 
 	dep := &appsv1.Deployment{
@@ -50,7 +50,7 @@ func (r *ReconcileVisitorsSite) frontendDeployment(v *visitorsv1alpha1.VisitorsS
 }
 
 func (r *ReconcileVisitorsSite) frontendService(v *visitorsv1alpha1.VisitorsSite) *corev1.Service {
-	labels := frontendLabels(v)
+	labels := labels(v, "frontend")
 
 	s := &corev1.Service{
 		ObjectMeta: metav1.ObjectMeta{
@@ -73,11 +73,4 @@ func (r *ReconcileVisitorsSite) frontendService(v *visitorsv1alpha1.VisitorsSite
 
 	controllerutil.SetControllerReference(v, s, r.scheme)
 	return s
-}
-
-func frontendLabels(v *visitorsv1alpha1.VisitorsSite) map[string]string {
-	return map[string]string{
-		"app": "visitors",
-		"visitorssite_cr": v.Name + "-frontend",
-	}
 }
