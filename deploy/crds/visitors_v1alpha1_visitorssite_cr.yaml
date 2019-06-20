@@ -1,7 +1,7 @@
 apiVersion: visitors.dobtech.io/v1alpha1
 kind: VisitorsSite
 metadata:
-  name: example-visitorssite
+  name: ex
   namespace: default
 spec:
   # Add fields here
