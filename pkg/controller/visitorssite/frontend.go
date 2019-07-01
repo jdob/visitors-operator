@@ -22,6 +22,25 @@ func (r *ReconcileVisitorsSite) frontendDeployment(v *visitorsv1alpha1.VisitorsS
 	size := int32(1)
 	host := v.Spec.MinikubeIP
 
+	env := []corev1.EnvVar{
+		{
+			Name:	"REACT_APP_SERVICE_HOST",
+			Value:	host,
+		},
+		{
+			Name:	"REACT_APP_SERVICE_PORT",
+			Value:	strconv.Itoa(backendServicePort),
+		},
+	}
+
+	// If the header was specified, add it as an env variable
+	if v.Spec.Title != "" {
+		env = append(env, corev1.EnvVar{
+			Name:	"REACT_APP_TITLE",
+			Value:	v.Spec.Title,
+		})
+	}
+
 	dep := &appsv1.Deployment{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:		v.Name + "-frontend",
@@ -44,16 +63,7 @@ func (r *ReconcileVisitorsSite) frontendDeployment(v *visitorsv1alpha1.VisitorsS
 							ContainerPort: 	frontendPort,
 							Name:			"visitors",
 						}},
-						Env:	[]corev1.EnvVar{
-							{
-								Name:	"REACT_APP_SERVICE_HOST",
-								Value:	host,
-							},
-							{
-								Name:	"REACT_APP_SERVICE_PORT",
-								Value:	strconv.Itoa(backendServicePort),
-							},
-						},
+						Env:	env,
 					}},
 				},
 			},

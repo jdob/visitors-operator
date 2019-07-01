@@ -16,7 +16,7 @@ type VisitorsSiteSpec struct {
 
 	Size       int32  `json:"size"`
 	MinikubeIP string `json:"minikube"`
-	Heading    string `json:"heading"`
+	Title      string `json:"title"`
 }
 
 // VisitorsSiteStatus defines the observed state of VisitorsSite
