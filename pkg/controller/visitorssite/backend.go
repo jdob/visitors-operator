@@ -1,6 +1,8 @@
 package visitorssite
 
 import (
+	"context"
+
 	visitorsv1alpha1 "github.com/jdob/visitors-operator/pkg/apis/visitors/v1alpha1"
 
 	appsv1 "k8s.io/api/apps/v1"
@@ -12,6 +14,7 @@ import (
 
 const backendPort = 8000
 const backendServicePort = 30685
+const backendImage = "jdob/visitors-service:latest"
 
 func (r *ReconcileVisitorsSite) backendDeployment(v *visitorsv1alpha1.VisitorsSite) *appsv1.Deployment {
 	labels := labels(v, "backend")
@@ -33,7 +36,7 @@ func (r *ReconcileVisitorsSite) backendDeployment(v *visitorsv1alpha1.VisitorsSi
 				},
 				Spec: corev1.PodSpec{
 					Containers: []corev1.Container{{
-						Image:	"jdob/visitors-service:latest",
+						Image:	backendImage,
 						ImagePullPolicy: corev1.PullAlways,
 						Name:	"visitors-service",
 						Ports:	[]corev1.ContainerPort{{
@@ -78,4 +81,10 @@ func (r *ReconcileVisitorsSite) backendService(v *visitorsv1alpha1.VisitorsSite)
 
 	controllerutil.SetControllerReference(v, s, r.scheme)
 	return s
+}
+
+func (r *ReconcileVisitorsSite) updateBackendStatus(v *visitorsv1alpha1.VisitorsSite) (error) {
+	v.Status.BackendImage = backendImage
+	err := r.client.Status().Update(context.TODO(), v)
+	return err
 }

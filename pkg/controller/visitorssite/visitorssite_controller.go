@@ -136,6 +136,12 @@ func (r *ReconcileVisitorsSite) Reconcile(request reconcile.Request) (reconcile.
 		return *result, err
 	}
 
+	err = r.updateBackendStatus(instance)
+	if err != nil {
+		// Requeue the request
+		return reconcile.Result{}, err
+	}
+
 	// == Visitors Web UI ==
 	result, err = r.ensureDeployment(request,
 									 instance,
@@ -151,6 +157,12 @@ func (r *ReconcileVisitorsSite) Reconcile(request reconcile.Request) (reconcile.
 								  r.frontendService(instance))
 	if result != nil {
 		return *result, err
+	}
+
+	err = r.updateFrontendStatus(instance)
+	if err != nil {
+		// Requeue the request
+		return reconcile.Result{}, err
 	}
 
 	// Everything went fine, don't requeue

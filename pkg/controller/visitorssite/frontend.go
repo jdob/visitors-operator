@@ -1,6 +1,7 @@
 package visitorssite
 
 import (
+	"context"
 	"strconv"
 
 	visitorsv1alpha1 "github.com/jdob/visitors-operator/pkg/apis/visitors/v1alpha1"
@@ -14,6 +15,7 @@ import (
 
 const frontendPort = 3000
 const frontendServicePort = 30686
+const frontendImage = "jdob/visitors-webui:latest"
 
 func (r *ReconcileVisitorsSite) frontendDeployment(v *visitorsv1alpha1.VisitorsSite) *appsv1.Deployment {
 	labels := labels(v, "frontend")
@@ -36,7 +38,7 @@ func (r *ReconcileVisitorsSite) frontendDeployment(v *visitorsv1alpha1.VisitorsS
 				},
 				Spec: corev1.PodSpec{
 					Containers: []corev1.Container{{
-						Image:	"jdob/visitors-webui:latest",
+						Image:	frontendImage,
 						Name:	"visitors-webui",
 						Ports:	[]corev1.ContainerPort{{
 							ContainerPort: 	frontendPort,
@@ -86,4 +88,10 @@ func (r *ReconcileVisitorsSite) frontendService(v *visitorsv1alpha1.VisitorsSite
 
 	controllerutil.SetControllerReference(v, s, r.scheme)
 	return s
+}
+
+func (r *ReconcileVisitorsSite) updateFrontendStatus(v *visitorsv1alpha1.VisitorsSite) (error) {
+	v.Status.FrontendImage = frontendImage
+	err := r.client.Status().Update(context.TODO(), v)
+	return err
 }

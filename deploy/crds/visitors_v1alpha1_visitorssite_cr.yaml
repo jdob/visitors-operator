@@ -6,4 +6,4 @@ metadata:
 spec:
   # Add fields here
   size: 2
-  minikube: 192.168.99.101
+  minikube: 192.168.99.100
