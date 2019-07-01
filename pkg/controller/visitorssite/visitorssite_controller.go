@@ -82,7 +82,7 @@ type ReconcileVisitorsSite struct {
 // The Controller will requeue the Request to be processed again if the returned error is non-nil or
 // Result.Requeue is true, otherwise upon completion it will remove the work from the queue.
 func (r *ReconcileVisitorsSite) Reconcile(request reconcile.Request) (reconcile.Result, error) {
-	reqLogger := log.WithValues("Request.Namespace", request.Namespace, "Request.Name", request.Name)
+	reqLogger := log.WithValues("Request.Namespace", request.Namespace,"Request.Name", request.Name)
 	reqLogger.Info("Reconciling VisitorsSite")
 
 	// Fetch the VisitorsSite instance
@@ -102,36 +102,40 @@ func (r *ReconcileVisitorsSite) Reconcile(request reconcile.Request) (reconcile.
 	var result *reconcile.Result
 
 	// == MySQL ==
-	result, err = r.ensureDeployment(request,
-									 instance,
-									 "mysql",
-									 r.mysqlDeployment(instance))
+	result, err = r.ensureDeployment(
+		request,
+		instance,
+		"mysql",
+		r.mysqlDeployment(instance))
 	if result != nil {
 		return *result, err
 	}
 
-	result, err = r.ensureService(request,
-								  instance,
-								  "mysql",
-								  r.mysqlService(instance))
+	result, err = r.ensureService(
+		request,
+		instance,
+		"mysql",
+		r.mysqlService(instance))
 	if result != nil {
 		return *result, err
 	}
 	r.waitForMysql(instance)
 
 	// == Visitors Service ==
-	result, err = r.ensureDeployment(request,
-									 instance,
-									 instance.Name + "-backend",
-									 r.backendDeployment(instance))
+	result, err = r.ensureDeployment(
+		request,
+		instance,
+		instance.Name+"-backend",
+		r.backendDeployment(instance))
 	if result != nil {
 		return *result, err
 	}
 
-	result, err = r.ensureService(request,
-								  instance,
-								  instance.Name + "-backend-service",
-								  r.backendService(instance))
+	result, err = r.ensureService(
+		request,
+		instance,
+		instance.Name+"-backend-service",
+		r.backendService(instance))
 	if result != nil {
 		return *result, err
 	}
@@ -143,18 +147,21 @@ func (r *ReconcileVisitorsSite) Reconcile(request reconcile.Request) (reconcile.
 	}
 
 	// == Visitors Web UI ==
-	result, err = r.ensureDeployment(request,
-									 instance,
-									 instance.Name + "-frontend",
-									 r.frontendDeployment(instance))
+	result, err = r.ensureDeployment(
+		request,
+		instance,
+		instance.Name+"-frontend",
+		r.frontendDeployment(instance))
 	if result != nil {
 		return *result, err
 	}
 
-	result, err = r.ensureService(request,
-								  instance,
-								  instance.Name + "-frontend-service",
-								  r.frontendService(instance))
+	result, err = r.ensureService(
+		request,
+		instance,
+		instance.Name+"-frontend-service",
+		r.frontendService(instance),
+	)
 	if result != nil {
 		return *result, err
 	}
@@ -170,17 +177,17 @@ func (r *ReconcileVisitorsSite) Reconcile(request reconcile.Request) (reconcile.
 }
 
 func (r *ReconcileVisitorsSite) ensureDeployment(request reconcile.Request,
-												 instance *visitorsv1alpha1.VisitorsSite,
-												 name string,
-												 dep *appsv1.Deployment,
-												) (*reconcile.Result, error) {
+	instance *visitorsv1alpha1.VisitorsSite,
+	name string,
+	dep *appsv1.Deployment,
+) (*reconcile.Result, error) {
 
 	// See if deployment already exists and create if it doesn't
 	found := &appsv1.Deployment{}
 	err := r.client.Get(context.TODO(), types.NamespacedName{
-		Name: name,
+		Name:      name,
 		Namespace: instance.Namespace,
-		}, found)
+	}, found)
 	if err != nil && errors.IsNotFound(err) {
 
 		// Create the deployment
@@ -205,15 +212,15 @@ func (r *ReconcileVisitorsSite) ensureDeployment(request reconcile.Request,
 }
 
 func (r *ReconcileVisitorsSite) ensureService(request reconcile.Request,
-											  instance *visitorsv1alpha1.VisitorsSite,
-											  name string,
-											  s *corev1.Service,
-											 ) (*reconcile.Result, error) {
+	instance *visitorsv1alpha1.VisitorsSite,
+	name string,
+	s *corev1.Service,
+) (*reconcile.Result, error) {
 	found := &corev1.Service{}
 	err := r.client.Get(context.TODO(), types.NamespacedName{
-		Name: name,
+		Name:      name,
 		Namespace: instance.Namespace,
-		}, found)
+	}, found)
 	if err != nil && errors.IsNotFound(err) {
 
 		// Create the service
@@ -239,8 +246,8 @@ func (r *ReconcileVisitorsSite) ensureService(request reconcile.Request,
 
 func labels(v *visitorsv1alpha1.VisitorsSite, tier string) map[string]string {
 	return map[string]string{
-		"app": 	"visitors",
+		"app":             "visitors",
 		"visitorssite_cr": v.Name,
-		"tier":	tier,
+		"tier":            tier,
 	}
 }
