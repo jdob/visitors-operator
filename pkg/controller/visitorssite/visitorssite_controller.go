@@ -144,6 +144,11 @@ func (r *ReconcileVisitorsSite) Reconcile(request reconcile.Request) (reconcile.
 		return reconcile.Result{}, err
 	}
 
+	result, err = r.handleBackendChanges(instance)
+	if result != nil {
+		return *result, err
+	}
+
 	// == Visitors Web UI ==
 	result, err = r.ensureDeployment(
 		request,
