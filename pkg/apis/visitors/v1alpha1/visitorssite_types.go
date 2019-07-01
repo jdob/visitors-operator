@@ -14,7 +14,7 @@ type VisitorsSiteSpec struct {
 	// Important: Run "operator-sdk generate k8s" to regenerate code after modifying this file
 	// Add custom validation using kubebuilder tags: https://book.kubebuilder.io/beyond_basics/generating_crd.html
 
-	Size int32 `json:"size"`
+	Size       int32  `json:"size"`
 	MinikubeIP string `json:"minikube"`
 }
 
@@ -25,7 +25,8 @@ type VisitorsSiteStatus struct {
 	// Important: Run "operator-sdk generate k8s" to regenerate code after modifying this file
 	// Add custom validation using kubebuilder tags: https://book.kubebuilder.io/beyond_basics/generating_crd.html
 
-	Visitors int32 `json:"visitors"`
+	BackendImage  string `json:"backend_image"`
+	FrontendImage string `json:"frontend_image"`
 }
 
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
