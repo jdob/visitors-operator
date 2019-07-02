@@ -19,13 +19,21 @@ const backendPort = 8000
 const backendServicePort = 30685
 const backendImage = "jdob/visitors-service:latest"
 
+func backendDeploymentName(v *visitorsv1alpha1.VisitorsSite) string {
+	return v.Name + "-backend"
+}
+
+func backendServiceName(v *visitorsv1alpha1.VisitorsSite) string {
+	return v.Name + "-backend-service"
+}
+
 func (r *ReconcileVisitorsSite) backendDeployment(v *visitorsv1alpha1.VisitorsSite) *appsv1.Deployment {
 	labels := labels(v, "backend")
 	size := v.Spec.Size
 
 	dep := &appsv1.Deployment{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:		v.Name + "-backend",
+			Name:		backendDeploymentName(v),
 			Namespace: 	v.Namespace,
 		},
 		Spec: appsv1.DeploymentSpec{
@@ -67,7 +75,7 @@ func (r *ReconcileVisitorsSite) backendService(v *visitorsv1alpha1.VisitorsSite)
 
 	s := &corev1.Service{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:		v.Name + "-backend-service",
+			Name:		backendServiceName(v),
 			Namespace: 	v.Namespace,
 		},
 		Spec: corev1.ServiceSpec{
@@ -95,7 +103,7 @@ func (r *ReconcileVisitorsSite) updateBackendStatus(v *visitorsv1alpha1.Visitors
 func (r *ReconcileVisitorsSite) handleBackendChanges(v *visitorsv1alpha1.VisitorsSite) (*reconcile.Result, error) {
 	found := &appsv1.Deployment{}
 	err := r.client.Get(context.TODO(), types.NamespacedName{
-		Name:      v.Name + "-backend",
+		Name:      backendDeploymentName(v),
 		Namespace: v.Namespace,
 	}, found)
 	if err != nil {
