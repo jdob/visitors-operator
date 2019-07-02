@@ -2,6 +2,7 @@ package visitorssite
 
 import (
 	"context"
+	"time"
 
 	visitorsv1alpha1 "github.com/jdob/visitors-operator/pkg/apis/visitors/v1alpha1"
 
@@ -10,6 +11,8 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/intstr"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
+	"k8s.io/apimachinery/pkg/types"
+	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 )
 
 const frontendPort = 3000
@@ -92,4 +95,32 @@ func (r *ReconcileVisitorsSite) updateFrontendStatus(v *visitorsv1alpha1.Visitor
 	v.Status.FrontendImage = frontendImage
 	err := r.client.Status().Update(context.TODO(), v)
 	return err
+}
+
+func (r *ReconcileVisitorsSite) handleFrontendChanges(v *visitorsv1alpha1.VisitorsSite) (*reconcile.Result, error) {
+	found := &appsv1.Deployment{}
+	err := r.client.Get(context.TODO(), types.NamespacedName{
+		Name:      v.Name + "-frontend",
+		Namespace: v.Namespace,
+	}, found)
+	if err != nil {
+		// The deployment may not have been created yet, so requeue
+		return &reconcile.Result{RequeueAfter:5 * time.Second}, err
+	}
+
+	title := v.Spec.Title
+	existing := (*found).Spec.Template.Spec.Containers[0].Env[0].Value
+
+	if title != existing {
+		(*found).Spec.Template.Spec.Containers[0].Env[0].Value = title
+		err = r.client.Update(context.TODO(), found)
+		if err != nil {
+			log.Error(err, "Failed to update Deployment.", "Deployment.Namespace", found.Namespace, "Deployment.Name", found.Name)
+			return &reconcile.Result{}, err
+		}
+		// Spec updated - return and requeue
+		return &reconcile.Result{Requeue: true}, nil
+	}
+
+	return nil, nil
 }

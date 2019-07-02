@@ -175,6 +175,11 @@ func (r *ReconcileVisitorsSite) Reconcile(request reconcile.Request) (reconcile.
 		return reconcile.Result{}, err
 	}
 
+	result, err = r.handleFrontendChanges(instance)
+	if result != nil {
+		return *result, err
+	}
+
 	// Everything went fine, don't requeue
 	return reconcile.Result{}, nil
 }
