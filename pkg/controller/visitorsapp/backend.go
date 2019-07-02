@@ -59,6 +59,10 @@ func (r *ReconcileVisitorsApp) backendDeployment(v *examplev1.VisitorsApp) *apps
 								Name:	"MYSQL_DATABASE",
 								Value:	"visitors",
 							},
+							{
+								Name:	"MYSQL_SERVICE_HOST",
+								Value:	mysqlServiceName(),
+							},
 						},
 					}},
 				},

@@ -14,13 +14,21 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 )
 
+func mysqlDeploymentName() string {
+	return "mysql"
+}
+
+func mysqlServiceName() string {
+	return "mysql-service"
+}
+
 func (r *ReconcileVisitorsApp) mysqlDeployment(v *examplev1.VisitorsApp) *appsv1.Deployment {
 	labels := labels(v, "mysql")
 	size := int32(1)
 
 	dep := &appsv1.Deployment{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:		"mysql",
+			Name:		mysqlDeploymentName(),
 			Namespace: 	v.Namespace,
 		},
 		Spec: appsv1.DeploymentSpec{
@@ -73,7 +81,7 @@ func (r *ReconcileVisitorsApp) mysqlService(v *examplev1.VisitorsApp) *corev1.Se
 
 	s := &corev1.Service{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:		"mysql",
+			Name:		mysqlServiceName(),
 			Namespace: 	v.Namespace,
 		},
 		Spec: corev1.ServiceSpec{
@@ -95,7 +103,7 @@ func (r *ReconcileVisitorsApp) waitForMysql(v *examplev1.VisitorsApp) (error) {
 	err := wait.Poll(1*time.Second, 1*time.Minute,
 		func() (done bool, err error) {
 			err = r.client.Get(context.TODO(), types.NamespacedName{
-				Name: "mysql",
+				Name: mysqlDeploymentName(),
 				Namespace: v.Namespace,
 				}, deployment)
 			if err != nil {
