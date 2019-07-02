@@ -41,7 +41,7 @@ rules:
   verbs:
   - update
 - apiGroups:
-  - visitors.dobtech.io
+  - example.com
   resources:
   - '*'
   verbs:

@@ -1,8 +1,0 @@
-apiVersion: visitors.dobtech.io/v1alpha1
-kind: VisitorsSite
-metadata:
-  name: ex
-  namespace: default
-spec:
-  size: 1
-  # title: "Custom Resource Title"

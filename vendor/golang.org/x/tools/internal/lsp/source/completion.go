@@ -31,6 +31,11 @@ type CompletionItem struct {
 
 	Kind CompletionItemKind
 
+	// Depth is how many levels were searched to find this completion.
+	// For example when completing "foo<>", "fooBar" is depth 0, and
+	// "fooBar.Baz" is depth 1.
+	Depth int
+
 	// Score is the internal relevance score.
 	// A higher score indicates that this completion item is more relevant.
 	Score float64
@@ -140,6 +145,9 @@ type completer struct {
 	// enclosingCompositeLiteral contains information about the composite literal
 	// enclosing the position.
 	enclosingCompositeLiteral *compLitInfo
+
+	// deepState contains the current state of our deep completion search.
+	deepState deepCompletionState
 }
 
 type compLitInfo struct {
@@ -190,24 +198,62 @@ func (c *completer) setSurrounding(ident *ast.Ident) {
 	}
 }
 
-// found adds a candidate completion.
-//
-// Only the first candidate of a given name is considered.
-func (c *completer) found(obj types.Object, weight float64) {
+// found adds a candidate completion. We will also search through the object's
+// members for more candidates.
+func (c *completer) found(obj types.Object, score float64) {
 	if obj.Pkg() != nil && obj.Pkg() != c.types && !obj.Exported() {
 		return // inaccessible
 	}
-	if c.seen[obj] {
-		return
+
+	if c.inDeepCompletion() {
+		// When searching deep, just make sure we don't have a cycle in our chain.
+		// We don't dedupe by object because we want to allow both "foo.Baz" and
+		// "bar.Baz" even though "Baz" is represented the same types.Object in both.
+		for _, seenObj := range c.deepState.chain {
+			if seenObj == obj {
+				return
+			}
+		}
+	} else {
+		// At the top level, dedupe by object.
+		if c.seen[obj] {
+			return
+		}
+		c.seen[obj] = true
 	}
-	c.seen[obj] = true
-	if c.matchingType(obj) {
-		weight *= highScore
+
+	cand := candidate{
+		obj:   obj,
+		score: score,
 	}
-	if c.wantTypeName() && !isTypeName(obj) {
-		weight *= lowScore
+
+	if c.matchingType(&cand) {
+		cand.score *= highScore
 	}
-	c.items = append(c.items, c.item(obj, weight))
+
+	// Favor shallow matches by lowering weight according to depth.
+	cand.score -= stdScore * float64(len(c.deepState.chain))
+
+	c.items = append(c.items, c.item(cand))
+
+	c.deepSearch(obj)
+}
+
+// candidate represents a completion candidate.
+type candidate struct {
+	// obj is the types.Object to complete to.
+	obj types.Object
+
+	// score is used to rank candidates.
+	score float64
+
+	// expandFuncCall is true if obj should be invoked in the completion.
+	// For example, expandFuncCall=true yields "foo()", expandFuncCall=false yields "foo".
+	expandFuncCall bool
+}
+
+type CompletionOptions struct {
+	DeepComplete bool
 }
 
 // Completion returns a list of possible candidates for completion, given a
@@ -216,11 +262,12 @@ func (c *completer) found(obj types.Object, weight float64) {
 // The selection is computed based on the preceding identifier and can be used by
 // the client to score the quality of the completion. For instance, some clients
 // may tolerate imperfect matches as valid completion results, since users may make typos.
-func Completion(ctx context.Context, f GoFile, pos token.Pos) ([]CompletionItem, *Selection, error) {
+func Completion(ctx context.Context, view View, f GoFile, pos token.Pos, opts CompletionOptions) ([]CompletionItem, *Selection, error) {
 	file := f.GetAST(ctx)
 	if file == nil {
 		return nil, nil, fmt.Errorf("no AST for %s", f.URI())
 	}
+
 	pkg := f.GetPackage(ctx)
 	if pkg == nil || pkg.IsIllTyped() {
 		return nil, nil, fmt.Errorf("package for %s is ill typed", f.URI())
@@ -248,7 +295,7 @@ func Completion(ctx context.Context, f GoFile, pos token.Pos) ([]CompletionItem,
 		types:                     pkg.GetTypes(),
 		info:                      pkg.GetTypesInfo(),
 		qf:                        qualifier(file, pkg.GetTypes(), pkg.GetTypesInfo()),
-		view:                      f.View(),
+		view:                      view,
 		ctx:                       ctx,
 		path:                      path,
 		pos:                       pos,
@@ -256,6 +303,8 @@ func Completion(ctx context.Context, f GoFile, pos token.Pos) ([]CompletionItem,
 		enclosingFunction:         enclosingFunction(path, pos, pkg.GetTypesInfo()),
 		enclosingCompositeLiteral: clInfo,
 	}
+
+	c.deepState.enabled = opts.DeepComplete
 
 	// Set the filter surrounding.
 	if ident, ok := path[0].(*ast.Ident); ok {
@@ -348,11 +397,7 @@ func (c *completer) selector(sel *ast.SelectorExpr) error {
 	// Is sel a qualified identifier?
 	if id, ok := sel.X.(*ast.Ident); ok {
 		if pkgname, ok := c.info.Uses[id].(*types.PkgName); ok {
-			// Enumerate package members.
-			scope := pkgname.Imported().Scope()
-			for _, name := range scope.Names() {
-				c.found(scope.Lookup(name), stdScore)
-			}
+			c.packageMembers(pkgname)
 			return nil
 		}
 	}
@@ -363,22 +408,33 @@ func (c *completer) selector(sel *ast.SelectorExpr) error {
 		return fmt.Errorf("cannot resolve %s", sel.X)
 	}
 
-	// Add methods of T.
-	mset := types.NewMethodSet(tv.Type)
+	return c.methodsAndFields(tv.Type, tv.Addressable())
+}
+
+func (c *completer) packageMembers(pkg *types.PkgName) {
+	scope := pkg.Imported().Scope()
+	for _, name := range scope.Names() {
+		c.found(scope.Lookup(name), stdScore)
+	}
+}
+
+func (c *completer) methodsAndFields(typ types.Type, addressable bool) error {
+	var mset *types.MethodSet
+
+	if addressable && !types.IsInterface(typ) && !isPointer(typ) {
+		// Add methods of *T, which includes methods with receiver T.
+		mset = types.NewMethodSet(types.NewPointer(typ))
+	} else {
+		// Add methods of T.
+		mset = types.NewMethodSet(typ)
+	}
+
 	for i := 0; i < mset.Len(); i++ {
 		c.found(mset.At(i).Obj(), stdScore)
 	}
 
-	// Add methods of *T.
-	if tv.Addressable() && !types.IsInterface(tv.Type) && !isPointer(tv.Type) {
-		mset := types.NewMethodSet(types.NewPointer(tv.Type))
-		for i := 0; i < mset.Len(); i++ {
-			c.found(mset.At(i).Obj(), stdScore)
-		}
-	}
-
 	// Add fields of T.
-	for _, f := range fieldSelections(tv.Type) {
+	for _, f := range fieldSelections(typ) {
 		c.found(f, stdScore)
 	}
 	return nil
@@ -651,9 +707,9 @@ func (c *completer) expectedCompositeLiteralType() types.Type {
 type typeModifier int
 
 const (
-	dereference typeModifier = iota // dereference ("*") operator
-	reference                       // reference ("&") operator
-	chanRead                        // channel read ("<-") operator
+	star      typeModifier = iota // dereference operator for expressions, pointer indicator for types
+	reference                     // reference ("&") operator
+	chanRead                      // channel read ("<-") operator
 )
 
 // typeInference holds information we have inferred about a type that can be
@@ -664,6 +720,16 @@ type typeInference struct {
 
 	// wantTypeName is true if we expect the name of a type.
 	wantTypeName bool
+
+	// modifiers are prefixes such as "*", "&" or "<-" that influence how
+	// a candidate type relates to the expected type.
+	modifiers []typeModifier
+
+	// assertableFrom is a type that must be assertable to our candidate type.
+	assertableFrom types.Type
+
+	// convertibleTo is a type our candidate type must be convertible to.
+	convertibleTo types.Type
 }
 
 // expectedType returns information about the expected type for an expression at
@@ -678,8 +744,9 @@ func expectedType(c *completer) typeInference {
 	}
 
 	var (
-		modifiers []typeModifier
-		typ       types.Type
+		modifiers     []typeModifier
+		typ           types.Type
+		convertibleTo types.Type
 	)
 
 Nodes:
@@ -711,6 +778,13 @@ Nodes:
 		case *ast.CallExpr:
 			// Only consider CallExpr args if position falls between parens.
 			if node.Lparen <= c.pos && c.pos <= node.Rparen {
+				// For type conversions like "int64(foo)" we can only infer our
+				// desired type is convertible to int64.
+				if typ := typeConversion(node, c.info); typ != nil {
+					convertibleTo = typ
+					break Nodes
+				}
+
 				if tv, ok := c.info.Types[node.Fun]; ok {
 					if sig, ok := tv.Type.(*types.Signature); ok {
 						if sig.Params().Len() == 0 {
@@ -781,7 +855,7 @@ Nodes:
 			}
 			return typeInference{}
 		case *ast.StarExpr:
-			modifiers = append(modifiers, dereference)
+			modifiers = append(modifiers, star)
 		case *ast.UnaryExpr:
 			switch node.Op {
 			case token.AND:
@@ -796,25 +870,43 @@ Nodes:
 		}
 	}
 
-	if typ != nil {
-		for _, mod := range modifiers {
-			switch mod {
-			case dereference:
-				// For every "*" deref operator, add another pointer layer to expected type.
-				typ = types.NewPointer(typ)
-			case reference:
-				// For every "&" ref operator, remove a pointer layer from expected type.
-				typ = deref(typ)
-			case chanRead:
-				// For every "<-" operator, add another layer of channelness.
-				typ = types.NewChan(types.SendRecv, typ)
+	return typeInference{
+		objType:       typ,
+		modifiers:     modifiers,
+		convertibleTo: convertibleTo,
+	}
+}
+
+// applyTypeModifiers applies the list of type modifiers to a type.
+func (ti typeInference) applyTypeModifiers(typ types.Type) types.Type {
+	for _, mod := range ti.modifiers {
+		switch mod {
+		case star:
+			// For every "*" deref operator, remove a pointer layer from candidate type.
+			typ = deref(typ)
+		case reference:
+			// For every "&" ref operator, add another pointer layer to candidate type.
+			typ = types.NewPointer(typ)
+		case chanRead:
+			// For every "<-" operator, remove a layer of channelness.
+			if ch, ok := typ.(*types.Chan); ok {
+				typ = ch.Elem()
 			}
 		}
 	}
+	return typ
+}
 
-	return typeInference{
-		objType: typ,
+// applyTypeNameModifiers applies the list of type modifiers to a type name.
+func (ti typeInference) applyTypeNameModifiers(typ types.Type) types.Type {
+	for _, mod := range ti.modifiers {
+		switch mod {
+		case star:
+			// For every "*" indicator, add a pointer layer to type name.
+			typ = types.NewPointer(typ)
+		}
 	}
+	return typ
 }
 
 // findSwitchStmt returns an *ast.CaseClause's corresponding *ast.SwitchStmt or
@@ -855,7 +947,11 @@ func breaksExpectedTypeInference(n ast.Node) bool {
 
 // expectTypeName returns information about the expected type name at position.
 func expectTypeName(c *completer) typeInference {
-	var wantTypeName bool
+	var (
+		wantTypeName   bool
+		modifiers      []typeModifier
+		assertableFrom types.Type
+	)
 
 Nodes:
 	for i, p := range c.path {
@@ -880,7 +976,15 @@ Nodes:
 			return typeInference{}
 		case *ast.CaseClause:
 			// Expect type names in type switch case clauses.
-			if _, ok := findSwitchStmt(c.path[i+1:], c.pos, n).(*ast.TypeSwitchStmt); ok {
+			if swtch, ok := findSwitchStmt(c.path[i+1:], c.pos, n).(*ast.TypeSwitchStmt); ok {
+				// The case clause types must be assertable from the type switch parameter.
+				ast.Inspect(swtch.Assign, func(n ast.Node) bool {
+					if ta, ok := n.(*ast.TypeAssertExpr); ok {
+						assertableFrom = c.info.TypeOf(ta.X)
+						return false
+					}
+					return true
+				})
 				wantTypeName = true
 				break Nodes
 			}
@@ -888,10 +992,14 @@ Nodes:
 		case *ast.TypeAssertExpr:
 			// Expect type names in type assert expressions.
 			if n.Lparen < c.pos && c.pos <= n.Rparen {
+				// The type in parens must be assertable from the expression type.
+				assertableFrom = c.info.TypeOf(n.X)
 				wantTypeName = true
 				break Nodes
 			}
 			return typeInference{}
+		case *ast.StarExpr:
+			modifiers = append(modifiers, star)
 		default:
 			if breaksExpectedTypeInference(p) {
 				return typeInference{}
@@ -900,27 +1008,84 @@ Nodes:
 	}
 
 	return typeInference{
-		wantTypeName: wantTypeName,
+		wantTypeName:   wantTypeName,
+		modifiers:      modifiers,
+		assertableFrom: assertableFrom,
 	}
 }
 
 // matchingType reports whether an object is a good completion candidate
 // in the context of the expected type.
-func (c *completer) matchingType(obj types.Object) bool {
-	actual := obj.Type()
+func (c *completer) matchingType(cand *candidate) bool {
+	if isTypeName(cand.obj) {
+		return c.matchingTypeName(cand)
+	}
 
-	// Use a function's return type as its type.
-	if sig, ok := actual.(*types.Signature); ok {
-		if sig.Results().Len() == 1 {
-			actual = sig.Results().At(0).Type()
+	objType := cand.obj.Type()
+
+	// Default to invoking *types.Func candidates. This is so function
+	// completions in an empty statement (or other cases with no expected type)
+	// are invoked by default.
+	cand.expandFuncCall = isFunc(cand.obj)
+
+	typeMatches := func(actual types.Type) bool {
+		// Take into account any type modifiers on the expected type.
+		actual = c.expectedType.applyTypeModifiers(actual)
+
+		if c.expectedType.objType != nil {
+			// AssignableTo covers the case where the types are equal, but also handles
+			// cases like assigning a concrete type to an interface type.
+			return types.AssignableTo(types.Default(actual), types.Default(c.expectedType.objType))
+		}
+
+		return false
+	}
+
+	if typeMatches(objType) {
+		// If obj's type matches, we don't want to expand to an invocation of obj.
+		cand.expandFuncCall = false
+		return true
+	}
+
+	// Try using a function's return type as its type.
+	if sig, ok := objType.Underlying().(*types.Signature); ok && sig.Results().Len() == 1 {
+		if typeMatches(sig.Results().At(0).Type()) {
+			// If obj's return value matches the expected type, we need to invoke obj
+			// in the completion.
+			cand.expandFuncCall = true
+			return true
 		}
 	}
 
-	if c.expectedType.objType != nil {
-		// AssignableTo covers the case where the types are equal, but also handles
-		// cases like assigning a concrete type to an interface type.
-		return types.AssignableTo(types.Default(actual), types.Default(c.expectedType.objType))
+	if c.expectedType.convertibleTo != nil {
+		return types.ConvertibleTo(objType, c.expectedType.convertibleTo)
 	}
 
 	return false
+}
+
+func (c *completer) matchingTypeName(cand *candidate) bool {
+	if !c.wantTypeName() {
+		return false
+	}
+
+	// Take into account any type name modifier prefixes.
+	actual := c.expectedType.applyTypeNameModifiers(cand.obj.Type())
+
+	if c.expectedType.assertableFrom != nil {
+		// Don't suggest the starting type in type assertions. For example,
+		// if "foo" is an io.Writer, don't suggest "foo.(io.Writer)".
+		if types.Identical(c.expectedType.assertableFrom, actual) {
+			return false
+		}
+
+		if intf, ok := c.expectedType.assertableFrom.Underlying().(*types.Interface); ok {
+			if !types.AssertableTo(intf, actual) {
+				return false
+			}
+		}
+	}
+
+	// Default to saying any type name is a match.
+	return true
 }
