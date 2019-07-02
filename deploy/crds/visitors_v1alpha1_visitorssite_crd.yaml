@@ -29,8 +29,20 @@ spec:
           type: object
         spec:
           type: object
+          properties:
+            size:
+              type: integer
+            title:
+              type: string
+          required:
+          - size
         status:
           type: object
+          properties:
+            backendImage:
+              type: string
+            frontendImage:
+              type: string
   version: v1alpha1
   versions:
   - name: v1alpha1
