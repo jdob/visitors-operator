@@ -19,6 +19,14 @@ const frontendPort = 3000
 const frontendServicePort = 30686
 const frontendImage = "jdob/visitors-webui:latest"
 
+func frontendDeploymentName(v *examplev1.VisitorsApp) string {
+	return v.Name + "-frontend"
+}
+
+func frontendServiceName(v *examplev1.VisitorsApp) string {
+	return v.Name + "-frontend-service"
+}
+
 func (r *ReconcileVisitorsApp) frontendDeployment(v *examplev1.VisitorsApp) *appsv1.Deployment {
 	labels := labels(v, "frontend")
 	size := int32(1)
@@ -34,7 +42,7 @@ func (r *ReconcileVisitorsApp) frontendDeployment(v *examplev1.VisitorsApp) *app
 
 	dep := &appsv1.Deployment{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:		v.Name + "-frontend",
+			Name:		frontendDeploymentName(v),
 			Namespace: 	v.Namespace,
 		},
 		Spec: appsv1.DeploymentSpec{
@@ -70,7 +78,7 @@ func (r *ReconcileVisitorsApp) frontendService(v *examplev1.VisitorsApp) *corev1
 
 	s := &corev1.Service{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:		v.Name + "-frontend-service",
+			Name:		frontendServiceName(v),
 			Namespace: 	v.Namespace,
 		},
 		Spec: corev1.ServiceSpec{
@@ -100,7 +108,7 @@ func (r *ReconcileVisitorsApp) updateFrontendStatus(v *examplev1.VisitorsApp) (e
 func (r *ReconcileVisitorsApp) handleFrontendChanges(v *examplev1.VisitorsApp) (*reconcile.Result, error) {
 	found := &appsv1.Deployment{}
 	err := r.client.Get(context.TODO(), types.NamespacedName{
-		Name:      v.Name + "-frontend",
+		Name:      frontendDeploymentName(v),
 		Namespace: v.Namespace,
 	}, found)
 	if err != nil {
