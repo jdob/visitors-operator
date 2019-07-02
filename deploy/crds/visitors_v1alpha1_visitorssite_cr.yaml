@@ -6,5 +6,5 @@ metadata:
 spec:
   # Add fields here
   size: 1
-  minikube: 192.168.99.100
+  # minikube: 192.168.99.100
   title: "Custom Resource Title"

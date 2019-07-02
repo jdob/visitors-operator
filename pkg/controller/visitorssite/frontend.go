@@ -2,7 +2,6 @@ package visitorssite
 
 import (
 	"context"
-	"strconv"
 
 	visitorsv1alpha1 "github.com/jdob/visitors-operator/pkg/apis/visitors/v1alpha1"
 
@@ -20,20 +19,9 @@ const frontendImage = "jdob/visitors-webui:latest"
 func (r *ReconcileVisitorsSite) frontendDeployment(v *visitorsv1alpha1.VisitorsSite) *appsv1.Deployment {
 	labels := labels(v, "frontend")
 	size := int32(1)
-	host := v.Spec.MinikubeIP
-
-	env := []corev1.EnvVar{
-		{
-			Name:	"REACT_APP_SERVICE_HOST",
-			Value:	host,
-		},
-		{
-			Name:	"REACT_APP_SERVICE_PORT",
-			Value:	strconv.Itoa(backendServicePort),
-		},
-	}
 
 	// If the header was specified, add it as an env variable
+	env := []corev1.EnvVar{}
 	if v.Spec.Title != "" {
 		env = append(env, corev1.EnvVar{
 			Name:	"REACT_APP_TITLE",
