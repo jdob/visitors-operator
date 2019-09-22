@@ -63,6 +63,24 @@ func (r *ReconcileVisitorsApp) backendDeployment(v *examplev1.VisitorsApp) *apps
 								Name:	"MYSQL_SERVICE_HOST",
 								Value:	mysqlServiceName(),
 							},
+							{
+								Name:	"MYSQL_USERNAME",
+								ValueFrom:	&corev1.EnvVarSource{
+									SecretKeyRef: &corev1.SecretKeySelector{
+										LocalObjectReference: corev1.LocalObjectReference{Name: mysqlAuthName()},
+										Key: "username",
+									},
+								},
+							},
+							{
+								Name:	"MYSQL_PASSWORD",
+								ValueFrom:	&corev1.EnvVarSource{
+									SecretKeyRef: &corev1.SecretKeySelector{
+										LocalObjectReference: corev1.LocalObjectReference{Name: mysqlAuthName()},
+										Key: "password",
+									},
+								},
+							},
 						},
 					}},
 				},

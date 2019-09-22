@@ -110,10 +110,17 @@ func (r *ReconcileVisitorsApp) Reconcile(request reconcile.Request) (reconcile.R
 	var result *reconcile.Result
 
 	// == MySQL ==========
+	result, err = r.ensureSecret(
+		request,
+		v,
+		r.mysqlAuthSecret(v))
+	if result != nil {
+		return *result, err
+	}
+
 	result, err = r.ensureDeployment(
 		request,
 		v,
-		"mysql",
 		r.mysqlDeployment(v))
 	if result != nil {
 		return *result, err
@@ -122,7 +129,6 @@ func (r *ReconcileVisitorsApp) Reconcile(request reconcile.Request) (reconcile.R
 	result, err = r.ensureService(
 		request,
 		v,
-		"mysql",
 		r.mysqlService(v))
 	if result != nil {
 		return *result, err
@@ -133,7 +139,6 @@ func (r *ReconcileVisitorsApp) Reconcile(request reconcile.Request) (reconcile.R
 	result, err = r.ensureDeployment(
 		request,
 		v,
-		backendDeploymentName(v),
 		r.backendDeployment(v))
 	if result != nil {
 		return *result, err
@@ -142,7 +147,6 @@ func (r *ReconcileVisitorsApp) Reconcile(request reconcile.Request) (reconcile.R
 	result, err = r.ensureService(
 		request,
 		v,
-		backendServiceName(v),
 		r.backendService(v))
 	if result != nil {
 		return *result, err
@@ -163,7 +167,6 @@ func (r *ReconcileVisitorsApp) Reconcile(request reconcile.Request) (reconcile.R
 	result, err = r.ensureDeployment(
 		request,
 		v,
-		frontendDeploymentName(v),
 		r.frontendDeployment(v))
 	if result != nil {
 		return *result, err
@@ -172,7 +175,6 @@ func (r *ReconcileVisitorsApp) Reconcile(request reconcile.Request) (reconcile.R
 	result, err = r.ensureService(
 		request,
 		v,
-		frontendServiceName(v),
 		r.frontendService(v),
 	)
 	if result != nil {

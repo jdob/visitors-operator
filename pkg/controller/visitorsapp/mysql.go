@@ -22,6 +22,26 @@ func mysqlServiceName() string {
 	return "mysql-service"
 }
 
+func mysqlAuthName() string {
+	return "mysql-auth"
+}
+
+func (r *ReconcileVisitorsApp) mysqlAuthSecret(v *examplev1.VisitorsApp) *corev1.Secret {
+	secret := &corev1.Secret{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:		mysqlAuthName(),
+			Namespace:	v.Namespace,
+		},
+		Type: "Opaque",
+		StringData: map[string]string{
+			"username": "visitors-user",
+			"password": "visitors-pass",
+		},
+	}
+	controllerutil.SetControllerReference(v, secret, r.scheme)
+	return secret
+}
+
 func (r *ReconcileVisitorsApp) mysqlDeployment(v *examplev1.VisitorsApp) *appsv1.Deployment {
 	labels := labels(v, "mysql")
 	size := int32(1)
@@ -59,11 +79,21 @@ func (r *ReconcileVisitorsApp) mysqlDeployment(v *examplev1.VisitorsApp) *appsv1
 							},
 							{
 								Name:	"MYSQL_USER",
-								Value:	"visitors",
+								ValueFrom:	&corev1.EnvVarSource{
+									SecretKeyRef: &corev1.SecretKeySelector{
+										LocalObjectReference: corev1.LocalObjectReference{Name: mysqlAuthName()},
+										Key: "username",
+									},
+								},
 							},
 							{
 								Name:	"MYSQL_PASSWORD",
-								Value:	"visitors",
+								ValueFrom:	&corev1.EnvVarSource{
+									SecretKeyRef: &corev1.SecretKeySelector{
+										LocalObjectReference: corev1.LocalObjectReference{Name: mysqlAuthName()},
+										Key: "password",
+									},
+								},
 							},
 						},
 					}},
