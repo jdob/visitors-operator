@@ -46,6 +46,20 @@ func (r *ReconcileVisitorsApp) mysqlDeployment(v *examplev1.VisitorsApp) *appsv1
 	labels := labels(v, "mysql")
 	size := int32(1)
 
+	userSecret := &corev1.EnvVarSource{
+		SecretKeyRef: &corev1.SecretKeySelector{
+			LocalObjectReference: corev1.LocalObjectReference{Name: mysqlAuthName()},
+			Key: "username",
+		},
+	}
+
+	passwordSecret := &corev1.EnvVarSource{
+		SecretKeyRef: &corev1.SecretKeySelector{
+			LocalObjectReference: corev1.LocalObjectReference{Name: mysqlAuthName()},
+			Key: "password",
+		},
+	}
+
 	dep := &appsv1.Deployment{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:		mysqlDeploymentName(),
@@ -79,21 +93,11 @@ func (r *ReconcileVisitorsApp) mysqlDeployment(v *examplev1.VisitorsApp) *appsv1
 							},
 							{
 								Name:	"MYSQL_USER",
-								ValueFrom:	&corev1.EnvVarSource{
-									SecretKeyRef: &corev1.SecretKeySelector{
-										LocalObjectReference: corev1.LocalObjectReference{Name: mysqlAuthName()},
-										Key: "username",
-									},
-								},
+								ValueFrom: userSecret,
 							},
 							{
 								Name:	"MYSQL_PASSWORD",
-								ValueFrom:	&corev1.EnvVarSource{
-									SecretKeyRef: &corev1.SecretKeySelector{
-										LocalObjectReference: corev1.LocalObjectReference{Name: mysqlAuthName()},
-										Key: "password",
-									},
-								},
+								ValueFrom: passwordSecret,
 							},
 						},
 					}},
@@ -127,28 +131,24 @@ func (r *ReconcileVisitorsApp) mysqlService(v *examplev1.VisitorsApp) *corev1.Se
 	return s
 }
 
-// Blocks until the MySQL deployment has finished
-func (r *ReconcileVisitorsApp) waitForMysql(v *examplev1.VisitorsApp) (error) {
+// Returns whether or not the MySQL deployment is running
+func (r *ReconcileVisitorsApp) isMysqlUp(v *examplev1.VisitorsApp) (bool) {
 	deployment := &appsv1.Deployment{}
-	err := wait.Poll(1*time.Second, 1*time.Minute,
-		func() (done bool, err error) {
-			err = r.client.Get(context.TODO(), types.NamespacedName{
-				Name: mysqlDeploymentName(),
-				Namespace: v.Namespace,
-				}, deployment)
-			if err != nil {
-				log.Error(err, "Deployment mysql not found")
-				return false, nil
-			}
 
-			if deployment.Status.ReadyReplicas == 1 {
-				log.Info("MySQL ready replica count met")
-				return true, nil
-			}
+	err := r.client.Get(context.TODO(), types.NamespacedName{
+		Name: mysqlDeploymentName(),
+		Namespace: v.Namespace,
+		}, deployment)
 
-			log.Info("Waiting for MySQL to start")
-			return false, nil
-		},
-	)
-	return err
+	if err != nil {
+		log.Error(err, "Deployment mysql not found")
+		return false
+	}
+
+	if deployment.Status.ReadyReplicas == 1 {
+		log.Info("MySQL ready replica count met")
+		return true
+	}
+
+	return false
 }

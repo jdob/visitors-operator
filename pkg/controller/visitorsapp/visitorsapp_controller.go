@@ -2,6 +2,8 @@ package visitorsapp
 
 import (
 	"context"
+	"fmt"
+	"time"
 
 	examplev1 "github.com/jdob/visitors-operator/pkg/apis/example/v1"
 
@@ -133,7 +135,17 @@ func (r *ReconcileVisitorsApp) Reconcile(request reconcile.Request) (reconcile.R
 	if result != nil {
 		return *result, err
 	}
-	r.waitForMysql(v)
+
+	mysqlRunning := r.isMysqlUp(v)
+
+	if !mysqlRunning {
+		// If MySQL isn't running yet, requeue the reconcile
+		// to run again after a delay
+		delay := time.Second*time.Duration(5)
+
+		log.Info(fmt.Sprintf("MySQL isn't running, waiting for %s", delay))
+		return reconcile.Result{RequeueAfter: delay}, nil
+	}
 
 	// == Visitors Backend  ==========
 	result, err = r.ensureDeployment(
