@@ -31,6 +31,20 @@ func (r *ReconcileVisitorsApp) backendDeployment(v *examplev1.VisitorsApp) *apps
 	labels := labels(v, "backend")
 	size := v.Spec.Size
 
+	userSecret := &corev1.EnvVarSource{
+		SecretKeyRef: &corev1.SecretKeySelector{
+			LocalObjectReference: corev1.LocalObjectReference{Name: mysqlAuthName()},
+			Key: "username",
+		},
+	}
+
+	passwordSecret := &corev1.EnvVarSource{
+		SecretKeyRef: &corev1.SecretKeySelector{
+			LocalObjectReference: corev1.LocalObjectReference{Name: mysqlAuthName()},
+			Key: "password",
+		},
+	}
+
 	dep := &appsv1.Deployment{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:		backendDeploymentName(v),
@@ -65,21 +79,11 @@ func (r *ReconcileVisitorsApp) backendDeployment(v *examplev1.VisitorsApp) *apps
 							},
 							{
 								Name:	"MYSQL_USERNAME",
-								ValueFrom:	&corev1.EnvVarSource{
-									SecretKeyRef: &corev1.SecretKeySelector{
-										LocalObjectReference: corev1.LocalObjectReference{Name: mysqlAuthName()},
-										Key: "username",
-									},
-								},
+								ValueFrom: userSecret,
 							},
 							{
 								Name:	"MYSQL_PASSWORD",
-								ValueFrom:	&corev1.EnvVarSource{
-									SecretKeyRef: &corev1.SecretKeySelector{
-										LocalObjectReference: corev1.LocalObjectReference{Name: mysqlAuthName()},
-										Key: "password",
-									},
-								},
+								ValueFrom: passwordSecret,
 							},
 						},
 					}},
