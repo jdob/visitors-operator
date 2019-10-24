@@ -144,7 +144,6 @@ func (r *ReconcileVisitorsApp) isMysqlUp(v *examplev1.VisitorsApp) (bool) {
 	}
 
 	if deployment.Status.ReadyReplicas == 1 {
-		log.Info("MySQL ready replica count met")
 		return true
 	}
 
