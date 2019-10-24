@@ -17,7 +17,7 @@ import (
 
 const backendPort = 8000
 const backendServicePort = 30685
-const backendImage = "jdob/visitors-service:latest"
+const backendImage = "jdob/visitors-service:1.0.0"
 
 func backendDeploymentName(v *examplev1.VisitorsApp) string {
 	return v.Name + "-backend"
