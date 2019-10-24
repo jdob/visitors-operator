@@ -112,26 +112,17 @@ func (r *ReconcileVisitorsApp) Reconcile(request reconcile.Request) (reconcile.R
 	var result *reconcile.Result
 
 	// == MySQL ==========
-	result, err = r.ensureSecret(
-		request,
-		v,
-		r.mysqlAuthSecret(v))
+	result, err = r.ensureSecret(request, v, r.mysqlAuthSecret(v))
 	if result != nil {
 		return *result, err
 	}
 
-	result, err = r.ensureDeployment(
-		request,
-		v,
-		r.mysqlDeployment(v))
+	result, err = r.ensureDeployment(request, v, r.mysqlDeployment(v))
 	if result != nil {
 		return *result, err
 	}
 
-	result, err = r.ensureService(
-		request,
-		v,
-		r.mysqlService(v))
+	result, err = r.ensureService(request, v, r.mysqlService(v))
 	if result != nil {
 		return *result, err
 	}
@@ -148,25 +139,19 @@ func (r *ReconcileVisitorsApp) Reconcile(request reconcile.Request) (reconcile.R
 	}
 
 	// == Visitors Backend  ==========
-	result, err = r.ensureDeployment(
-		request,
-		v,
-		r.backendDeployment(v))
+	result, err = r.ensureDeployment(request, v, r.backendDeployment(v))
 	if result != nil {
 		return *result, err
 	}
 
-	result, err = r.ensureService(
-		request,
-		v,
-		r.backendService(v))
+	result, err = r.ensureService(request, v, r.backendService(v))
 	if result != nil {
 		return *result, err
 	}
 
 	err = r.updateBackendStatus(v)
 	if err != nil {
-		// Requeue the request
+		// Requeue the request if the status could not be updated
 		return reconcile.Result{}, err
 	}
 
@@ -176,18 +161,12 @@ func (r *ReconcileVisitorsApp) Reconcile(request reconcile.Request) (reconcile.R
 	}
 
 	// == Visitors Frontend ==========
-	result, err = r.ensureDeployment(
-		request,
-		v,
-		r.frontendDeployment(v))
+	result, err = r.ensureDeployment(request, v, r.frontendDeployment(v))
 	if result != nil {
 		return *result, err
 	}
 
-	result, err = r.ensureService(
-		request,
-		v,
-		r.frontendService(v),
+	result, err = r.ensureService(request, v, r.frontendService(v),
 	)
 	if result != nil {
 		return *result, err
